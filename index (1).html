@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <title>4 בשורה</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+        }
+
+        #board {
+            position: relative;
+            margin: auto;
+        }
+
+        .cell {
+            width: 60px;
+            height: 60px;
+            border: 2px solid #333;
+            box-sizing: border-box;
+            border-radius: 6px;
+            background: #00aaff;
+            float: left;
+            position: relative;
+        }
+
+        .disc {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            position: absolute;
+            transition: top 0.5s ease;
+            left: 2px;
+        }
+
+        #controls {
+            margin-bottom: 20px;
+        }
+
+        input {
+            width: 50px;
+            margin: 0 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+function App() {
+  const [rows, setRows] = useState(6);
+  const [cols, setCols] = useState(7);
+  const [started, setStarted] = useState(false);
+  const [grid, setGrid] = useState([]);
+  const [player, setPlayer] = useState(1);
+  const [winner, setWinner] = useState(null);
+  const [drop, setDrop] = useState(null);
+  const [vsComputer, setVsComputer] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(10);
+  const [error, setError] = useState('');
+  const discRef = useRef(null);
+  const cellSize = 60;
+
+  useEffect(() => {
+    if (started) initGrid();
+  }, [started]);
+
+  useEffect(() => {
+    if (drop && discRef.current) {
+      requestAnimationFrame(() => {
+        discRef.current.style.top = drop.row * cellSize + 'px';
+      });
+    }
+  }, [drop]);
+
+  useEffect(() => {
+    if (started && !winner) {
+      setSecondsLeft(10);
+    }
+  }, [player, started, winner]);
+
+  useEffect(() => {
+    if (!started || winner) return;
+
+    if (secondsLeft <= 0 && !drop) {
+      setPlayer(prev => (prev === 1 ? 2 : 1));
+      setSecondsLeft(10);
+    } else if (!drop) {
+      const timer = setTimeout(() => setSecondsLeft(secondsLeft - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [secondsLeft, started, winner, drop]);
+
+  function initGrid() {
+    setGrid(Array(rows).fill().map(() => Array(cols).fill(0)));
+    setPlayer(1);
+    setWinner(null);
+    setDrop(null);
+  }
+
+  function handleColumnClick(c) {
+    if (winner || drop || (vsComputer && player === 2)) return;
+    const g = grid;
+    let r = rows - 1;
+    while (r >= 0 && g[r][c] !== 0) r--;
+    if (r < 0) return;
+    setDrop({ col: c, row: r, player });
+  }
+
+  function onDropTransitionEnd() {
+    const { col, row, player: p } = drop;
+    const newGrid = grid.map(r => [...r]);
+    newGrid[row][col] = p;
+    setGrid(newGrid);
+    if (checkWin(newGrid, row, col)) {
+      setWinner(p);
+    } else {
+      setPlayer(p === 1 ? 2 : 1);
+    }
+    setDrop(null);
+  }
+
+  function checkWin(g, r0, c0) {
+    const dirs = [[1,0],[0,1],[1,1],[1,-1]];
+    const me = g[r0][c0];
+    for (let [dx,dy] of dirs) {
+      let cnt = 1;
+      for (let sign of [1,-1]) {
+        let r = r0 + dx*sign, c = c0 + dy*sign;
+        while (r>=0 && r<rows && c>=0 && c<cols && g[r][c] === me) {
+          cnt++; r += dx*sign; c += dy*sign;
+        }
+      }
+      if (cnt >= 4) return true;
+    }
+    return false;
+  }
+
+  function computerMove() {
+    const validCols = grid[0].map((v,i) => v === 0 ? i : null).filter(i => i !== null);
+    if (!validCols.length) return;
+    const c = validCols[Math.floor(Math.random() * validCols.length)];
+    let r = rows - 1;
+    while (r >= 0 && grid[r][c] !== 0) r--;
+    setDrop({ col: c, row: r, player });
+  }
+
+  useEffect(() => {
+    if (vsComputer && player === 2 && !winner && !drop) {
+      const timer = setTimeout(() => computerMove(), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [player, vsComputer, winner, drop]);
+
+  if (!started) {
+    return (
+      <div id="controls">
+        <h1>4 בשורה</h1>
+        <h2>יכולות האפליקציה:</h2>
+        <ul style={{ textAlign: 'right', display: 'inline-block' }}>
+          <li>לוח מותאם אישית (הגדרת שורות ועמודות)</li>
+          <li>אנימציית נפילת אסימון</li>
+          <li>משחק נגד המחשב</li>
+          <li>הגבלת זמן של 10 שניות לכל תור</li>
+        </ul>
+        <label>שורות: <input type="number" min="4" value={rows} onChange={e => setRows(Math.max(4, +e.target.value))} /></label>
+        <label>עמודות: <input type="number" min="4" value={cols} onChange={e => setCols(Math.max(4, +e.target.value))} /></label>
+        <label><input type="checkbox" checked={vsComputer} onChange={e => setVsComputer(e.target.checked)} /> שחק נגד המחשב</label>
+        <br/>
+        <button onClick={() => {
+          if (rows < 4 || cols < 4) {
+            setError('לא ניתן להתחיל משחק עם פחות מ-4 שורות ועמודות');
+          } else {
+            setError('');
+            setStarted(true);
+          }
+        }}>התחל משחק</button>
+        {error && <p style={{ color: 'red' }}>{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h1>4 בשורה</h1>
+      {winner ? (
+        <p style={{ fontWeight: 'bold', fontSize: '1.2em' }}>
+          {vsComputer ? (winner === 2 ? 'המחשב ניצח!' : 'השחקן ניצח!') : `שחקן ${winner} ניצח!`}
+        </p>
+      ) : (
+        <div>
+          <p>{vsComputer ? (player === 2 ? 'תור המחשב' : 'תור השחקן') : `תור שחקן ${player}`}</p>
+          <p>זמן נותר: {secondsLeft} שניות</p>
+        </div>
+      )}
+      <div id="board" style={{ direction: 'ltr', width: cols*cellSize, height: rows*cellSize }}>
+        {grid.map((rowArr, r) =>
+          rowArr.map((cell, c) => (
+            <div key={`${r}-${c}`} className="cell"></div>
+          ))
+        )}
+        {grid.map((rowArr, r) =>
+          rowArr.map((cell, c) =>
+            cell > 0 && (
+              <div
+                key={`disc-${r}-${c}`}
+                className="disc"
+                style={{
+                  backgroundColor: cell === 1 ? 'red' : 'yellow',
+                  left: c * cellSize + 2,
+                  top: r * cellSize + 2
+                }}
+              ></div>
+            )
+          )
+        )}
+        {drop && (
+          <div
+            ref={discRef}
+            className="disc"
+            style={{
+              backgroundColor: drop.player === 1 ? 'red' : 'yellow',
+              left: drop.col * cellSize + 2,
+              top: 2
+            }}
+            onTransitionEnd={onDropTransitionEnd}
+          ></div>
+        )}
+        <div style={{ position: 'absolute', top: 0, left: 0, width: cols*cellSize, height: rows*cellSize, display: 'grid', gridTemplateColumns: `repeat(${cols}, ${cellSize}px)`, gridTemplateRows: `repeat(${rows}, ${cellSize}px)` }}>
+          {Array(cols * rows).fill().map((_, idx) => {
+            const c = idx % cols;
+            const disabled = drop || winner || (vsComputer && player === 2);
+            return <div key={idx} onClick={() => handleColumnClick(c)} style={{ cursor: disabled ? 'default' : 'pointer' }}></div>;
+          })}
+        </div>
+      </div>
+      <button onClick={initGrid} style={{ marginTop: 20 }}>התחל מחדש</button>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
